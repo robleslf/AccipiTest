@@ -121,103 +121,111 @@ class QuizFrame(ctk.CTkFrame):
     def __init__(self, parent, controller, manager, questions, mode, pack_id=None, resume_data=None):
         super().__init__(parent)
         self.controller, self.manager, self.questions, self.mode, self.pack_id = controller, manager, questions, mode, pack_id
+        
+        # Inicialización de variables de estado
         if resume_data:
-            self.current_idx, self.aciertos, self.nuevos_fallos, self.acertadas = resume_data['current_idx'], resume_data['aciertos'], resume_data['nuevos_fallos'], resume_data['acertadas']
+            self.current_idx = resume_data['current_idx']
+            self.aciertos = resume_data['aciertos']
+            self.nuevos_fallos = resume_data['nuevos_fallos']
+            self.acertadas = resume_data['acertadas']
         else:
             self.current_idx, self.aciertos, self.nuevos_fallos, self.acertadas = 0, 0, [], []
         
-        self.total, self.letters = len(questions), ['A', 'B', 'C', 'D', 'E', 'F']
+        self.total = len(questions)
+        self.letters = ['A', 'B', 'C', 'D', 'E', 'F']
         self.answered = False
         self.key_map = {}
+        self.widgets = {}
+        self.display_order = []
+        
         self.controller.bind("<Key>", self.handle_key)
         
-        head = ctk.CTkFrame(self, height=50); head.pack(fill="x", padx=10, pady=10)
-        ctk.CTkLabel(head, text=f"MODO: {mode.upper()}", font=(FONT_NAME, 16, "bold"), text_color="#3B8ED0").pack(side="left", padx=15)
-        self.lbl_prog = ctk.CTkLabel(head, text="", font=(FONT_NAME, 16)); self.lbl_prog.pack(side="right", padx=15)
+        # --- DISEÑO DE LA INTERFAZ ---
+        
+        # 1. Cabecera (Progreso)
+        self.head = ctk.CTkFrame(self, height=40)
+        self.head.pack(fill="x", padx=10, pady=5)
+        self.lbl_mode = ctk.CTkLabel(self.head, text=f"MODO: {mode.upper()}", font=(FONT_NAME, 14, "bold"), text_color="#3B8ED0")
+        self.lbl_mode.pack(side="left", padx=15)
+        self.lbl_prog = ctk.CTkLabel(self.head, text="", font=(FONT_NAME, 14))
+        self.lbl_prog.pack(side="right", padx=15)
 
-        self.txt_q = ctk.CTkTextbox(self, height=150, font=(FONT_NAME, SIZE_PREGUNTA), wrap="word")
-        self.txt_q.pack(fill="x", padx=20, pady=10); self.txt_q.configure(state="disabled")
+        # 2. Cuadro de la Pregunta (Fijo arriba para que siempre se lea)
+        self.txt_q = ctk.CTkTextbox(self, height=180, font=(FONT_NAME, SIZE_PREGUNTA), wrap="word")
+        self.txt_q.pack(fill="x", padx=10, pady=5)
 
-        self.scroll_opts = ctk.CTkScrollableFrame(self, label_text="Respuesta")
-        self.scroll_opts.pack(fill="both", expand=True, padx=20, pady=5)
+        # 3. Zona Inferior Desplazable (Opciones + Explicación)
+        self.scroll_body = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self.scroll_body.pack(fill="both", expand=True, padx=10, pady=5)
 
-        self.lbl_feed = ctk.CTkLabel(self, text="", font=(FONT_NAME, 26, "bold")); self.lbl_feed.pack(pady=5)
-        self.txt_exp = ctk.CTkTextbox(self, height=180, fg_color="#1E1E1E", font=(FONT_NAME, SIZE_EXPLICACION), wrap="word")
-        self.txt_exp.pack(fill="x", padx=20, pady=10); self.txt_exp.pack_forget()
+        self.opts_frame = ctk.CTkFrame(self.scroll_body, fg_color="transparent")
+        self.opts_frame.pack(fill="x")
 
-        btns = ctk.CTkFrame(self, fg_color="transparent"); btns.pack(fill="x", padx=40, pady=20)
-        self.btn_act = ctk.CTkButton(btns, text="CONFIRMAR", height=65, font=(FONT_NAME, 22, "bold"), command=self.check_or_next)
-        self.btn_act.pack(side="left", fill="x", expand=True, padx=(0,5))
-        ctk.CTkButton(btns, text="💾 GUARDAR", width=150, height=65, fg_color="#E67E22", command=self.quick_save).pack(side="left", padx=5)
-        ctk.CTkButton(btns, text="SALIR", width=120, height=65, fg_color="#444", command=self.exit_quiz).pack(side="left", padx=(5,0))
+        self.lbl_feed = ctk.CTkLabel(self.scroll_body, text="", font=(FONT_NAME, 24, "bold"))
+        self.lbl_feed.pack(pady=10)
+
+        self.txt_exp = ctk.CTkTextbox(self.scroll_body, height=250, font=(FONT_NAME, SIZE_EXPLICACION), wrap="word", fg_color="#1E1E1E")
+        # Se empaqueta solo al responder
+
+        # 4. Botonera (Fija abajo)
+        self.btns_f = ctk.CTkFrame(self, height=80)
+        self.btns_f.pack(fill="x", side="bottom", padx=10, pady=10)
+        
+        self.btn_act = ctk.CTkButton(self.btns_f, text="CONFIRMAR", height=60, font=(FONT_NAME, 20, "bold"), command=self.check_or_next)
+        self.btn_act.pack(side="left", fill="x", expand=True, padx=5)
+        
+        ctk.CTkButton(self.btns_f, text="💾", width=60, height=60, fg_color="#E67E22", command=self.quick_save).pack(side="left", padx=5)
+        ctk.CTkButton(self.btns_f, text="SALIR", width=100, height=60, fg_color="#444", command=self.exit_quiz).pack(side="left", padx=5)
         
         self.load_q()
 
     def handle_key(self, e):
+        if self.current_idx >= len(self.questions): return
         q = self.questions[self.current_idx]
         if e.keysym == 'Return': self.check_or_next(); return
-        if e.keysym == 'space' and q['tipo'] != 'rellenar': self.check_or_next(); return
         if not self.answered and e.char.lower() in self.key_map:
-            k = self.key_map[e.char.lower()]; self.toggle(k, self.widgets[k], q['tipo'])
+            k = self.key_map[e.char.lower()]
+            self.toggle(k, self.widgets[k], q['tipo'])
 
     def clean_ansi(self, t): 
         return re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])').sub('', str(t)) if t else ""
 
-# --- Dentro de class QuizFrame en ui.py ---
-
     def load_q(self):
-            self.answered = False
-            self.txt_exp.pack_forget()
-            self.lbl_feed.configure(text="")
-            self.btn_act.configure(text="CONFIRMAR (Enter)", fg_color="#3B8ED0")
-            
-            for w in self.scroll_opts.winfo_children(): 
-                w.destroy()
-                
-            if self.current_idx >= len(self.questions): 
-                self.finish()
-                return
-                
-            q = self.questions[self.current_idx]
-            
-            # --- ESTAS LÍNEAS SON LAS QUE MUESTRAN EL ENUNCIADO (Faltaban antes) ---
-            self.lbl_prog.configure(text=f"Pregunta {self.current_idx+1} de {self.total}")
-            self.txt_q.configure(state="normal")
-            self.txt_q.delete("0.0", "end")
-            self.txt_q.insert("0.0", self.clean_ansi(q['pregunta']))
-            self.txt_q.configure(state="disabled")
-            # -----------------------------------------------------------------------
-    
-            self.selected, self.widgets, self.key_map, self.display_order = set(), {}, {}, []
-            
-            if q['tipo'] == 'rellenar':
-                self.entry = ctk.CTkEntry(self.scroll_opts, height=55, font=(FONT_NAME, 22))
-                self.entry.pack(fill="x", pady=40, padx=20)
-                self.entry.focus()
-            else:
-                # Mezclamos las opciones
-                opts = list(q['opciones'].items())
-                import random
-                random.shuffle(opts) 
-                self.display_order = opts
-                
-                for i, (k, txt) in enumerate(opts):
-                    l = self.letters[i] # Asigna A, B, C... según el nuevo orden
-                    self.key_map[l.lower()] = k # Mapea la letra a la respuesta real
-                    
-                    btn = ctk.CTkButton(
-                        self.scroll_opts, 
-                        text=f"{l}) {self.clean_ansi(txt)}", 
-                        fg_color="transparent", 
-                        border_width=1,
-                        anchor="w",
-                        height=50,
-                        font=(FONT_NAME, SIZE_OPCION)
-                    )
-                    # Configuramos el comando por separado para que el botón se pase correctamente
-                    btn.configure(command=lambda key=k, b=btn: self.toggle(key, b, q['tipo']))
-                    btn.pack(fill="x", pady=6, padx=10)
-                    self.widgets[k] = btn
+        self.answered = False
+        self.txt_exp.pack_forget()
+        self.lbl_feed.configure(text="")
+        self.btn_act.configure(text="CONFIRMAR (Enter)", fg_color="#3B8ED0")
+        
+        for w in self.opts_frame.winfo_children(): w.destroy()
+        if self.current_idx >= len(self.questions): self.finish(); return
+
+        q = self.questions[self.current_idx]
+        self.lbl_prog.configure(text=f"Pregunta {self.current_idx+1} de {self.total}")
+        
+        # Cargar pregunta
+        self.txt_q.configure(state="normal")
+        self.txt_q.delete("0.0", "end")
+        self.txt_q.insert("0.0", self.clean_ansi(q['pregunta']))
+        self.txt_q.configure(state="disabled")
+
+        self.selected, self.widgets, self.key_map, self.display_order = set(), {}, {}, []
+        
+        if q['tipo'] == 'rellenar':
+            self.entry = ctk.CTkEntry(self.opts_frame, height=50, font=(FONT_NAME, 20), width=400)
+            self.entry.pack(pady=20); self.entry.focus()
+        else:
+            opts = list(q['opciones'].items())
+            random.shuffle(opts)
+            self.display_order = opts
+            for i, (k, txt) in enumerate(opts):
+                l = self.letters[i]
+                self.key_map[l.lower()] = k
+                btn = ctk.CTkButton(self.opts_frame, text=f"{l}) {self.clean_ansi(txt)}", 
+                                    fg_color="transparent", border_width=1, anchor="w", 
+                                    height=45, font=(FONT_NAME, SIZE_OPCION))
+                btn.configure(command=lambda key=k, b=btn: self.toggle(key, b, q['tipo']))
+                btn.pack(fill="x", pady=4)
+                self.widgets[k] = btn
 
     def toggle(self, k, btn, t):
         if self.answered: return
@@ -229,12 +237,15 @@ class QuizFrame(ctk.CTkFrame):
             if k in self.selected: self.selected.remove(k); btn.configure(fg_color="transparent", border_color="#555")
             else: self.selected.add(k); btn.configure(fg_color="#1F6AA5", border_color="#3B8ED0")
 
-    def check_or_next(self): self.next() if self.answered else self.check()
+    def check_or_next(self):
+        if self.answered: self.next()
+        else: self.check()
 
     def check(self):
         q = self.questions[self.current_idx]
         if q['tipo'] == 'rellenar':
-            ok = self.entry.get().strip().lower() in [x.lower() for x in q['respuesta_correcta']]
+            user_ans = self.entry.get().strip().lower()
+            ok = any(user_ans == val.lower() for val in q['respuesta_correcta'])
         else:
             if not self.selected: return
             ok = "".join(sorted(list(self.selected))) == "".join(sorted(list(q['respuesta_correcta'])))
@@ -245,31 +256,52 @@ class QuizFrame(ctk.CTkFrame):
                 b.configure(state="disabled")
                 if k in q['respuesta_correcta']: b.configure(border_color="#2ECC71", border_width=3)
                 if k in self.selected: b.configure(fg_color="#27AE60" if k in q['respuesta_correcta'] else "#C0392B")
+
         if ok:
-            self.aciertos += 1; self.acertadas.append(q); self.lbl_feed.configure(text="¡EXCELENTE! 🎉", text_color="#2ECC71"); self.btn_act.configure(text="CONTINUAR ➡", fg_color="#27AE60")
+            self.aciertos += 1; self.acertadas.append(q)
+            self.lbl_feed.configure(text="¡EXCELENTE! 🎉", text_color="#2ECC71")
+            self.btn_act.configure(text="SIGUIENTE ➡", fg_color="#27AE60")
         else:
-            self.nuevos_fallos.append(q); self.lbl_feed.configure(text="ERROR ❌", text_color="#E74C3C"); self.btn_act.configure(text="ENTENDIDO ➡", fg_color="#C0392B")
+            self.nuevos_fallos.append(q)
+            self.lbl_feed.configure(text="ERROR ❌", text_color="#E74C3C")
+            self.btn_act.configure(text="ENTENDIDO ➡", fg_color="#C0392B")
+
+        # Cargar y mostrar Explicación
+        self.txt_exp.configure(state="normal")
+        self.txt_exp.delete("0.0", "end")
+        gen_exp = q.get('explicacion', {}).get('general', 'No hay explicación.')
+        exp_text = f"💡 EXPLICACIÓN:\n{self.clean_ansi(gen_exp)}\n\n"
         
-        self.txt_exp.pack(fill="x", padx=20, pady=10); self.txt_exp.configure(state="normal"); self.txt_exp.delete("0.0", "end")
-        exp = f"EXPLICACIÓN:\n{self.clean_ansi(q['explicacion']['general'])}\n\n"
-        if q['tipo'] == 'rellenar': exp += f"Válidas: {', '.join(q['respuesta_correcta'])}"
+        if q['tipo'] == 'rellenar':
+            exp_text += f"✅ Respuestas válidas: {', '.join(q['respuesta_correcta'])}"
         else:
             for i, (id_o, _) in enumerate(self.display_order):
-                exp += f"{'✅' if id_o in q['respuesta_correcta'] else '❌'} {self.letters[i]}: {self.clean_ansi(q['explicacion']['opciones'].get(id_o, ''))}\n"
-        self.txt_exp.insert("0.0", exp); self.txt_exp.configure(state="disabled")
+                sym = "✅" if id_o in q['respuesta_correcta'] else "❌"
+                det = q['explicacion']['opciones'].get(id_o, "")
+                exp_text += f"{sym} {self.letters[i]}: {self.clean_ansi(det)}\n"
+        
+        self.txt_exp.insert("0.0", exp_text)
+        self.txt_exp.configure(state="disabled")
+        self.txt_exp.pack(fill="x", padx=10, pady=10)
 
-    def next(self): self.current_idx += 1; self.load_q()
-    def quick_save(self): self.manager.save_suspended_test({"questions": self.questions, "current_idx": self.current_idx, "aciertos": self.aciertos, "nuevos_fallos": self.nuevos_fallos, "acertadas": self.acertadas, "mode": self.mode, "pack_id": self.pack_id}); messagebox.showinfo("Guardado", "Progreso guardado.")
-    def exit_quiz(self): self.quick_save(); self.controller.unbind("<Key>"); self.controller.show_dashboard()
+    def next(self): 
+        self.current_idx += 1
+        self.load_q()
+
+    def quick_save(self): 
+        self.manager.save_suspended_test({"questions": self.questions, "current_idx": self.current_idx, "aciertos": self.aciertos, "nuevos_fallos": self.nuevos_fallos, "acertadas": self.acertadas, "mode": self.mode, "pack_id": self.pack_id})
+        messagebox.showinfo("Guardado", "Progreso guardado.")
+
+    def exit_quiz(self): 
+        self.quick_save()
+        self.controller.unbind("<Key>")
+        self.controller.show_dashboard()
+
     def finish(self):
         self.controller.unbind("<Key>"); self.manager.delete_suspended_test()
         if self.nuevos_fallos: self.manager.update_failures(self.nuevos_fallos)
-        if self.mode == 'study' and self.pack_id:
-            st = self.manager.load_state(); res = {"timestamp": str(datetime.now()), "aciertos": self.aciertos, "total": self.total}
-            if self.pack_id not in st["packs_de_preguntas"]: st["packs_de_preguntas"][self.pack_id] = {"intentos_completados": 0, "resultados": []}
-            st["packs_de_preguntas"][self.pack_id]["resultados"].append(res); st["packs_de_preguntas"][self.pack_id]["intentos_completados"] += 1; self.manager.save_state(st)
-        messagebox.showinfo("Final", f"Resultado: {self.aciertos}/{self.total}"); self.controller.show_dashboard()
-
+        messagebox.showinfo("Final", f"Resultado: {self.aciertos}/{self.total}")
+        self.controller.show_dashboard()
 
 class MainApp(ctk.CTk):
     def __init__(self, data_manager):
