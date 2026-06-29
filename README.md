@@ -34,7 +34,7 @@ En Linux, el programa se ejecuta directamente desde el código fuente:
 
 1. **Clonar el repositorio:**
    ```bash
-   git clone https://github.com/tu-usuario/AccipiTest.git
+   git clone https://github.com/robleslf/AccipiTest.git
    cd AccipiTest
    ```
 2. **Crear entorno virtual y activar:**
