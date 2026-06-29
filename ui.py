@@ -99,9 +99,10 @@ class DashboardFrame(ctk.CTkFrame):
     def toggle_all(self):
         for v in self.vars.values(): v.set(self.all_var.get())
     def launch_study(self, pid):
-        preguntas = self.manager.load_questions_from_pack(pid)
-        random.shuffle(preguntas)  # <--- Añadimos esta línea para desordenar preguntas
-        self.controller.start_quiz(preguntas, "study", pid)
+            preguntas = self.manager.load_questions_from_pack(pid)
+            import random
+            random.shuffle(preguntas)  # Desordena la lista de preguntas
+            self.controller.start_quiz(preguntas, "study", pid)
 
     def launch_random(self):
         pks = [i for i, v in self.vars.items() if v.get()]
@@ -165,50 +166,58 @@ class QuizFrame(ctk.CTkFrame):
 # --- Dentro de class QuizFrame en ui.py ---
 
     def load_q(self):
-        self.answered = False
-        self.txt_exp.pack_forget()
-        self.lbl_feed.configure(text="")
-        self.btn_act.configure(text="CONFIRMAR (Enter)", fg_color="#3B8ED0")
-        
-        for w in self.scroll_opts.winfo_children(): 
-            w.destroy()
+            self.answered = False
+            self.txt_exp.pack_forget()
+            self.lbl_feed.configure(text="")
+            self.btn_act.configure(text="CONFIRMAR (Enter)", fg_color="#3B8ED0")
             
-        if self.current_idx >= len(self.questions): 
-            self.finish()
-            return
-            
-        q = self.questions[self.current_idx]
-        
-        # ... (código de mostrar la pregunta en el textbox) ...
-    
-        self.selected, self.widgets, self.key_map, self.display_order = set(), {}, {}, []
-        
-        if q['tipo'] == 'rellenar':
-            self.entry = ctk.CTkEntry(self.scroll_opts, height=55, font=(FONT_NAME, 22))
-            self.entry.pack(fill="x", pady=40, padx=20)
-            self.entry.focus()
-        else:
-            # Convertimos las opciones a una lista y las mezclamos
-            opts = list(q['opciones'].items())
-            random.shuffle(opts) # <--- Esto es lo que desordena las respuestas cada vez
-            self.display_order = opts
-            
-            for i, (k, txt) in enumerate(opts):
-                letra_visual = self.letters[i] # Siempre será A, B, C... en orden
-                self.key_map[letra_visual.lower()] = k # Pero mapea a la clave original (A, B o C)
+            for w in self.scroll_opts.winfo_children(): 
+                w.destroy()
                 
-                btn = ctk.CTkButton(
-                    self.scroll_opts, 
-                    text=f"{letra_visual}) {self.clean_ansi(txt)}", 
-                    fg_color="transparent", 
-                    border_width=1,
-                    anchor="w",
-                    command=lambda key=k, b=None: self.toggle(key, b, q['tipo'])
-                )
-                # Truco para pasar el botón correcto al lambda
-                btn.configure(command=lambda k=k, b=btn: self.toggle(k, b, q['tipo']))
-                btn.pack(fill="x", pady=6, padx=10)
-                self.widgets[k] = btn
+            if self.current_idx >= len(self.questions): 
+                self.finish()
+                return
+                
+            q = self.questions[self.current_idx]
+            
+            # --- ESTAS LÍNEAS SON LAS QUE MUESTRAN EL ENUNCIADO (Faltaban antes) ---
+            self.lbl_prog.configure(text=f"Pregunta {self.current_idx+1} de {self.total}")
+            self.txt_q.configure(state="normal")
+            self.txt_q.delete("0.0", "end")
+            self.txt_q.insert("0.0", self.clean_ansi(q['pregunta']))
+            self.txt_q.configure(state="disabled")
+            # -----------------------------------------------------------------------
+    
+            self.selected, self.widgets, self.key_map, self.display_order = set(), {}, {}, []
+            
+            if q['tipo'] == 'rellenar':
+                self.entry = ctk.CTkEntry(self.scroll_opts, height=55, font=(FONT_NAME, 22))
+                self.entry.pack(fill="x", pady=40, padx=20)
+                self.entry.focus()
+            else:
+                # Mezclamos las opciones
+                opts = list(q['opciones'].items())
+                import random
+                random.shuffle(opts) 
+                self.display_order = opts
+                
+                for i, (k, txt) in enumerate(opts):
+                    l = self.letters[i] # Asigna A, B, C... según el nuevo orden
+                    self.key_map[l.lower()] = k # Mapea la letra a la respuesta real
+                    
+                    btn = ctk.CTkButton(
+                        self.scroll_opts, 
+                        text=f"{l}) {self.clean_ansi(txt)}", 
+                        fg_color="transparent", 
+                        border_width=1,
+                        anchor="w",
+                        height=50,
+                        font=(FONT_NAME, SIZE_OPCION)
+                    )
+                    # Configuramos el comando por separado para que el botón se pase correctamente
+                    btn.configure(command=lambda key=k, b=btn: self.toggle(key, b, q['tipo']))
+                    btn.pack(fill="x", pady=6, padx=10)
+                    self.widgets[k] = btn
 
     def toggle(self, k, btn, t):
         if self.answered: return
