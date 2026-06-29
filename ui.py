@@ -298,10 +298,35 @@ class QuizFrame(ctk.CTkFrame):
         self.controller.show_dashboard()
 
     def finish(self):
-        self.controller.unbind("<Key>"); self.manager.delete_suspended_test()
-        if self.nuevos_fallos: self.manager.update_failures(self.nuevos_fallos)
-        messagebox.showinfo("Final", f"Resultado: {self.aciertos}/{self.total}")
-        self.controller.show_dashboard()
+            self.controller.unbind("<Key>")
+            self.manager.delete_suspended_test() # Borra el test en pausa si existía
+            
+            if self.nuevos_fallos: 
+                self.manager.update_failures(self.nuevos_fallos)
+            
+            # Guardar progreso solo si estamos en Modo Estudio
+            if self.mode == 'study' and self.pack_id:
+                st = self.manager.load_state()
+                res = {
+                    "timestamp": str(datetime.now()), 
+                    "aciertos": self.aciertos, 
+                    "total": self.total
+                }
+                
+                # Nos aseguramos de que el pack existe en el archivo de estado
+                if self.pack_id not in st["packs_de_preguntas"]:
+                    st["packs_de_preguntas"][self.pack_id] = {"intentos_completados": 0, "resultados": []}
+                
+                # Añadimos el resultado e incrementamos el contador
+                st["packs_de_preguntas"][self.pack_id]["resultados"].append(res)
+                st["packs_de_preguntas"][self.pack_id]["intentos_completados"] += 1
+                
+                # Guardamos el archivo
+                self.manager.save_state(st)
+            
+            # Ventana de confirmación final
+            messagebox.showinfo("Test Finalizado", f"¡Buen trabajo!\nResultado: {self.aciertos}/{self.total}\nEl progreso ha sido guardado.")
+            self.controller.show_dashboard()
 
 class MainApp(ctk.CTk):
     def __init__(self, data_manager):
