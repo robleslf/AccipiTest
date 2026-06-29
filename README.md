@@ -19,7 +19,7 @@ Tienes dos formas de utilizar AccipiTest en Windows:
 
 **1. Versión Portable (Recomendado):**
 * Ve a la sección de [**Releases**](https://github.com/robleslf/accipitest/releases).
-* Descarga el archivo `AccipiTest.zip`.
+* Descarga el archivo `AccipiTest.rar`.
 * Descomprime y ejecuta `AccipiTest.exe`. No requiere instalación.
 
 **2. Ejecución desde el código fuente:**
