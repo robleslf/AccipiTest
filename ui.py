@@ -180,13 +180,25 @@ class QuizFrame(ctk.CTkFrame):
         self.load_q()
 
     def handle_key(self, e):
-        if self.current_idx >= len(self.questions): return
-        q = self.questions[self.current_idx]
-        if e.keysym == 'Return': self.check_or_next(); return
-        if not self.answered and e.char.lower() in self.key_map:
-            k = self.key_map[e.char.lower()]
-            self.toggle(k, self.widgets[k], q['tipo'])
-
+            if self.current_idx >= len(self.questions): return
+            q = self.questions[self.current_idx]
+            
+            # 1. Enter para confirmar o siguiente
+            if e.keysym == 'Return': 
+                self.check_or_next()
+                return
+                
+            # 2. Barra espaciadora para confirmar o siguiente 
+            # (Solo si no es una pregunta de escribir texto)
+            if e.keysym == 'space' and q['tipo'] != 'rellenar':
+                self.check_or_next()
+                return
+    
+            # 3. Teclas A, B, C... para seleccionar opciones
+            if not self.answered and e.char.lower() in self.key_map:
+                k = self.key_map[e.char.lower()]
+                self.toggle(k, self.widgets[k], q['tipo'])
+    
     def clean_ansi(self, t): 
         return re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])').sub('', str(t)) if t else ""
 
